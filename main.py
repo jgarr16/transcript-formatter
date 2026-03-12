@@ -71,6 +71,8 @@ def main():
         platform = None
         save_dir = None
 
+    filename = args.output or _make_filename(platform, source_url)
+
     try:
         formatted = format_transcript(
             raw_text,
@@ -79,7 +81,7 @@ def main():
             platform=platform,
             use_ai=use_ai,
         )
-        output_path = save_transcript(formatted, filename=args.output, directory=save_dir)
+        output_path = save_transcript(formatted, filename=filename, directory=save_dir)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         if args.notify:
@@ -91,6 +93,44 @@ def main():
     if args.notify:
         name = output_path.name
         _notify("Transcript Formatted", f"Saved: {name}")
+
+
+def _make_filename(platform=None, source_url=None):
+    """
+    Build a filename like: 2026-03-12_transcript_substack_your-engineers-are-building-your.md
+    Falls back gracefully when platform or URL slug aren't available.
+    """
+    import re
+    from datetime import datetime
+    from urllib.parse import urlparse
+
+    date = datetime.now().strftime("%Y-%m-%d")
+    parts = [date, "transcript"]
+
+    if platform:
+        parts.append(platform.lower())
+
+    if source_url:
+        try:
+            parsed = urlparse(source_url if "://" in source_url else "https://" + source_url)
+            # YouTube: use video ID from ?v= rather than the path "/watch"
+            from urllib.parse import parse_qs
+            qs = parse_qs(parsed.query)
+            if "v" in qs:
+                slug = qs["v"][0]
+            else:
+                segments = [s for s in parsed.path.split("/") if s]
+                slug = segments[-1] if segments else ""
+            # Sanitize: lowercase, keep alphanumeric and hyphens, collapse runs
+            slug = slug.lower()
+            slug = re.sub(r"[^a-z0-9-]", "-", slug)
+            slug = re.sub(r"-{2,}", "-", slug).strip("-")
+            if slug:
+                parts.append(slug[:80])  # cap length
+        except Exception:
+            pass
+
+    return "_".join(parts) + ".md"
 
 
 def _get_browser_url():
