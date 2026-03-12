@@ -209,22 +209,37 @@ def _parse_source(url, fallback_hint=None):
         return None, fallback_hint or "Transcript"
 
 
+FOLDER_PICKER_TIMEOUT = 60  # seconds before falling back to default
+
+
 def _pick_folder():
-    """Show a native Finder folder picker. Returns path string or None if cancelled."""
+    """
+    Show a native folder picker, forced to the front.
+    Falls back to the configured default directory on cancel or timeout.
+    """
     import subprocess
     from config import load_config
-    default = load_config().get("output_dir", "~/Documents/Transcripts")
-    default = os.path.expanduser(default)
+    default = os.path.expanduser(load_config().get("output_dir", "~/Documents/Transcripts"))
+
+    # activate brings the dialog to the front regardless of what's currently focused
     script = (
-        f'tell application "Finder"\n'
-        f'  set dest to choose folder with prompt "Where should the transcript be saved?"\n'
-        f'  return POSIX path of dest\n'
-        f'end tell'
+        'tell application "Finder" to activate\n'
+        'tell application "Finder"\n'
+        '  set dest to choose folder with prompt "Where should the transcript be saved?"\n'
+        '  return POSIX path of dest\n'
+        'end tell'
     )
-    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    if result.returncode == 0:
-        return result.stdout.strip()
-    return None  # User cancelled — fall back to config default
+    try:
+        result = subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, text=True,
+            timeout=FOLDER_PICKER_TIMEOUT,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except subprocess.TimeoutExpired:
+        _notify("Format Transcript", f"No folder chosen — saved to default: {default}")
+    return None  # triggers fallback to config default in save_transcript
 
 
 def _notify(title: str, message: str, is_error: bool = False):
