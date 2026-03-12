@@ -60,12 +60,25 @@ def main():
     # Determine AI flag
     use_ai = True if args.ai else (False if args.no_ai else None)
 
-    # When running as a Service, ask where to save via a Finder folder picker.
-    # CLI usage keeps the configured output_dir unless --output specifies a full path.
-    save_dir = _pick_folder() if args.notify else None
+    # When running as a Service, ask for source URL then pick save folder.
+    if args.notify:
+        source_url = _prompt_for_url()
+        platform, source_hint = _parse_source(source_url, args.source)
+        save_dir = _pick_folder()
+    else:
+        source_url = None
+        source_hint = args.source
+        platform = None
+        save_dir = None
 
     try:
-        formatted = format_transcript(raw_text, source_hint=args.source, use_ai=use_ai)
+        formatted = format_transcript(
+            raw_text,
+            source_hint=source_hint,
+            source_url=source_url,
+            platform=platform,
+            use_ai=use_ai,
+        )
         output_path = save_transcript(formatted, filename=args.output, directory=save_dir)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -78,6 +91,72 @@ def main():
     if args.notify:
         name = output_path.name
         _notify("Transcript Formatted", f"Saved: {name}")
+
+
+def _prompt_for_url():
+    """Show a dialog asking for the source URL. Returns string or None if skipped."""
+    import subprocess
+    script = (
+        'display dialog "Paste the source URL (or leave blank to skip):" '
+        'default answer "" '
+        'with title "Format Transcript" '
+        'buttons {"Skip", "OK"} default button "OK"'
+    )
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if result.returncode != 0:
+        return None  # Skip clicked or dismissed
+    # Extract the text answer from: "button returned:OK, text returned:https://..."
+    for part in result.stdout.strip().split(", "):
+        if part.startswith("text returned:"):
+            url = part[len("text returned:"):].strip()
+            return url if url else None
+    return None
+
+
+def _parse_source(url, fallback_hint=None):
+    """
+    Parse a URL to determine the platform name and a clean source hint title.
+    Returns (platform, source_hint) — both strings or None.
+    """
+    if not url:
+        return None, fallback_hint
+
+    PLATFORMS = {
+        "youtube.com": "YouTube",
+        "youtu.be":    "YouTube",
+        "substack.com": "Substack",
+        "masterclass.com": "MasterClass",
+        "vimeo.com": "Vimeo",
+        "coursera.org": "Coursera",
+        "udemy.com": "Udemy",
+        "podcasts.apple.com": "Apple Podcasts",
+        "open.spotify.com": "Spotify",
+        "ted.com": "TED",
+        "tedx.com": "TEDx",
+        "linkedin.com": "LinkedIn Learning",
+        "skillshare.com": "Skillshare",
+        "rumble.com": "Rumble",
+        "odysee.com": "Odysee",
+    }
+
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url if "://" in url else "https://" + url)
+        host = parsed.netloc.lower().lstrip("www.")
+        # Match against known platforms (also handles subdomains like name.substack.com)
+        platform = None
+        for domain, name in PLATFORMS.items():
+            if host == domain or host.endswith("." + domain):
+                platform = name
+                break
+        if not platform:
+            # Use the bare domain as a best-guess label
+            platform = host.split(".")[0].capitalize() if host else None
+
+        source_hint = fallback_hint or platform or "Transcript"
+        return platform, source_hint
+    except Exception:
+        return None, fallback_hint or "Transcript"
 
 
 def _pick_folder():

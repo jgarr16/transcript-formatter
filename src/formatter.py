@@ -17,6 +17,8 @@ from cleaners.plain import clean_plain
 def format_transcript(
     raw_text: str,
     source_hint: str = None,
+    source_url: str = None,
+    platform: str = None,
     use_ai: bool = None,
 ) -> str:
     """
@@ -24,7 +26,9 @@ def format_transcript(
 
     Args:
         raw_text:    Raw transcript text (any supported format).
-        source_hint: Optional title string (e.g. video title or URL).
+        source_hint: Title for the Markdown header.
+        source_url:  Original URL (shown in header, optional).
+        platform:    Detected platform name (YouTube, Substack, etc.).
         use_ai:      True/False to force/skip AI. None uses config default.
 
     Returns:
@@ -55,7 +59,7 @@ def format_transcript(
         # Unknown format, no AI configured — fall back to plain cleaning
         body = clean_plain(raw_text)
 
-    return _wrap_markdown(body, source_hint or "Transcript", fmt.value)
+    return _wrap_markdown(body, source_hint or "Transcript", platform, source_url)
 
 
 def save_transcript(content: str, filename: str = None, directory: str = None) -> Path:
@@ -82,11 +86,16 @@ def _handle_unknown(text: str, config: dict) -> str:
     return clean_plain(text)
 
 
-def _wrap_markdown(body: str, title: str, detected_format: str) -> str:
+def _wrap_markdown(body: str, title: str, platform: str = None, source_url: str = None) -> str:
     date_str = datetime.now().strftime("%Y-%m-%d")
+    meta_parts = [f"Formatted: {date_str}"]
+    if platform:
+        meta_parts.append(f"Source: {platform}")
+    if source_url:
+        meta_parts.append(f"[{source_url}]({source_url})")
     header = (
         f"# {title}\n\n"
-        f"*Formatted: {date_str} · Source format: {detected_format}*\n\n"
+        f"*{' · '.join(meta_parts)}*\n\n"
         "---\n\n"
     )
     return header + body
