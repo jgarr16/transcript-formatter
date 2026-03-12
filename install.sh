@@ -69,7 +69,15 @@ INFO_EOF
 
 # The shell command that runs inside the Automator action.
 # stdin = selected text passed by macOS Services architecture.
-SHELL_CMD="$PYTHON \"$MAIN_PY\" --notify 2>>/tmp/transcript_formatter.log"
+# Handle both stdin (inputMethod=0) and argument-style input gracefully.
+# If stdin is empty, fall back to $@ (handles both Automator input modes).
+SHELL_CMD="INPUT=\$(cat)
+if [ -z \"\$INPUT\" ] && [ \$# -gt 0 ]; then INPUT=\"\$*\"; fi
+if [ -z \"\$INPUT\" ]; then
+  osascript -e 'display notification \"No text was selected.\" with title \"Format Transcript\"'
+  exit 0
+fi
+echo \"\$INPUT\" | $PYTHON \"$MAIN_PY\" --notify 2>>/tmp/transcript_formatter.log"
 
 cat > "$CONTENTS_DIR/document.wflow" << PLIST_EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -137,7 +145,7 @@ cat > "$CONTENTS_DIR/document.wflow" << PLIST_EOF
 					<key>CheckedForUserDefaultShell</key>
 					<true/>
 					<key>inputMethod</key>
-					<integer>1</integer>
+					<integer>0</integer>
 					<key>shell</key>
 					<string>/bin/bash</string>
 					<key>source</key>
