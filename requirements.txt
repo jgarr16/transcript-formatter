@@ -1,0 +1,6 @@
+# Core — no dependencies needed for basic formatting (stdlib only)
+
+# AI providers — install whichever you use:
+# anthropic        # Claude (Anthropic)
+# openai           # GPT (OpenAI)
+# requests         # Ollama (local)
