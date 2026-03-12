@@ -63,22 +63,27 @@ def main():
     # When running as a Service, ask for source URL then pick save folder.
     if args.notify:
         source_url = _prompt_for_url()
-        platform, source_hint = _parse_source(source_url, args.source)
+        platform, _ = _parse_source(source_url, args.source)
+        meta = _fetch_meta(source_url)
+        source_hint = meta["display_title"] or platform or "Transcript"
+        source_label = meta["source_label"]
         save_dir = _pick_folder()
     else:
         source_url = None
-        source_hint = args.source
         platform = None
+        source_hint = args.source
+        source_label = None
+        meta = {"display_title": None, "source_label": None, "slug": None}
         save_dir = None
 
-    filename = args.output or _make_filename(platform, source_url)
+    filename = args.output or _make_filename(platform, source_url, meta.get("slug"))
 
     try:
         formatted = format_transcript(
             raw_text,
             source_hint=source_hint,
             source_url=source_url,
-            platform=platform,
+            platform=source_label or platform,
             use_ai=use_ai,
         )
         output_path = save_transcript(formatted, filename=filename, directory=save_dir)
@@ -95,7 +100,32 @@ def main():
         _notify("Transcript Formatted", f"Saved: {name}")
 
 
-def _make_filename(platform=None, source_url=None):
+def _fetch_meta(url):
+    """
+    Fetch page metadata and return a dict ready for use in main().
+    Returns display_title, source_label, and slug (for filename).
+    Never raises.
+    """
+    if not url:
+        return {"display_title": None, "source_label": None, "slug": None}
+    try:
+        from metadata import fetch_metadata, build_display_title, build_source_label, slugify_title
+    except ImportError:
+        return {"display_title": None, "source_label": None, "slug": None}
+
+    try:
+        platform, _ = _parse_source(url)
+        raw = fetch_metadata(url)
+        return {
+            "display_title": build_display_title(raw, platform),
+            "source_label":  build_source_label(raw, platform),
+            "slug":          slugify_title(raw["title"]) if raw.get("title") else None,
+        }
+    except Exception:
+        return {"display_title": None, "source_label": None, "slug": None}
+
+
+def _make_filename(platform=None, source_url=None, title_slug=None):
     """
     Build a filename like: 2026-03-12_transcript_substack_your-engineers-are-building-your.md
     Falls back gracefully when platform or URL slug aren't available.
@@ -110,10 +140,12 @@ def _make_filename(platform=None, source_url=None):
     if platform:
         parts.append(platform.lower())
 
-    if source_url:
+    # Prefer title slug (from og:title); fall back to URL path slug
+    if title_slug:
+        parts.append(title_slug[:80])
+    elif source_url:
         try:
             parsed = urlparse(source_url if "://" in source_url else "https://" + source_url)
-            # YouTube: use video ID from ?v= rather than the path "/watch"
             from urllib.parse import parse_qs
             qs = parse_qs(parsed.query)
             if "v" in qs:
@@ -121,12 +153,11 @@ def _make_filename(platform=None, source_url=None):
             else:
                 segments = [s for s in parsed.path.split("/") if s]
                 slug = segments[-1] if segments else ""
-            # Sanitize: lowercase, keep alphanumeric and hyphens, collapse runs
             slug = slug.lower()
             slug = re.sub(r"[^a-z0-9-]", "-", slug)
             slug = re.sub(r"-{2,}", "-", slug).strip("-")
             if slug:
-                parts.append(slug[:80])  # cap length
+                parts.append(slug[:80])
         except Exception:
             pass
 
