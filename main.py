@@ -60,9 +60,13 @@ def main():
     # Determine AI flag
     use_ai = True if args.ai else (False if args.no_ai else None)
 
+    # When running as a Service, ask where to save via a Finder folder picker.
+    # CLI usage keeps the configured output_dir unless --output specifies a full path.
+    save_dir = _pick_folder() if args.notify else None
+
     try:
         formatted = format_transcript(raw_text, source_hint=args.source, use_ai=use_ai)
-        output_path = save_transcript(formatted, filename=args.output)
+        output_path = save_transcript(formatted, filename=args.output, directory=save_dir)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         if args.notify:
@@ -74,6 +78,24 @@ def main():
     if args.notify:
         name = output_path.name
         _notify("Transcript Formatted", f"Saved: {name}")
+
+
+def _pick_folder() -> str | None:
+    """Show a native Finder folder picker. Returns path string or None if cancelled."""
+    import subprocess
+    from config import load_config
+    default = load_config().get("output_dir", "~/Documents/Transcripts")
+    default = os.path.expanduser(default)
+    script = (
+        f'tell application "Finder"\n'
+        f'  set dest to choose folder with prompt "Where should the transcript be saved?"\n'
+        f'  return POSIX path of dest\n'
+        f'end tell'
+    )
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if result.returncode == 0:
+        return result.stdout.strip()
+    return None  # User cancelled — fall back to config default
 
 
 def _notify(title: str, message: str, is_error: bool = False):

@@ -58,10 +58,10 @@ def format_transcript(
     return _wrap_markdown(body, source_hint or "Transcript", fmt.value)
 
 
-def save_transcript(content: str, filename: str = None) -> Path:
-    """Write formatted content to the configured output directory."""
+def save_transcript(content: str, filename: str = None, directory: str = None) -> Path:
+    """Write formatted content to directory (Finder-picked or config default)."""
     config = load_config()
-    output_dir = Path(config["output_dir"]).expanduser()
+    output_dir = Path(directory).expanduser() if directory else Path(config["output_dir"]).expanduser()
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if not filename:
