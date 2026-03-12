@@ -93,19 +93,69 @@ def main():
         _notify("Transcript Formatted", f"Saved: {name}")
 
 
-def _prompt_for_url():
-    """Show a dialog asking for the source URL. Returns string or None if skipped."""
+def _get_browser_url():
+    """
+    Ask the frontmost browser for its current tab URL via AppleScript.
+    Tries browsers in order: Arc, Chrome, Brave, Edge, Safari, Firefox.
+    Returns URL string or None.
+    """
     import subprocess
-    script = (
-        'display dialog "Paste the source URL (or leave blank to skip):" '
-        'default answer "" '
-        'with title "Format Transcript" '
-        'buttons {"Skip", "OK"} default button "OK"'
+
+    browsers = (
+        ("Arc",            'tell application "Arc" to return URL of active tab of front window'),
+        ("Google Chrome",  'tell application "Google Chrome" to return URL of active tab of front window'),
+        ("Brave Browser",  'tell application "Brave Browser" to return URL of active tab of front window'),
+        ("Microsoft Edge", 'tell application "Microsoft Edge" to return URL of active tab of front window'),
+        ("Safari",         'tell application "Safari" to return URL of current tab of front window'),
+        ("Firefox",        'tell application "Firefox" to return URL of active tab of front window'),
     )
+
+    for name, script in browsers:
+        # Only query browsers that are actually running
+        check = subprocess.run(
+            ["osascript", "-e", f'application "{name}" is running'],
+            capture_output=True, text=True
+        )
+        if check.stdout.strip() != "true":
+            continue
+        result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        if result.returncode == 0:
+            url = result.stdout.strip()
+            if url and url.startswith("http"):
+                return url
+
+    return None
+
+
+def _prompt_for_url():
+    """
+    Try to grab the URL automatically from the frontmost browser.
+    If found, show a confirmation dialog so the user can correct it.
+    If not found, fall back to a manual entry dialog.
+    Returns URL string or None if skipped.
+    """
+    import subprocess
+
+    auto_url = _get_browser_url()
+
+    if auto_url:
+        script = (
+            f'display dialog "Source URL (edit if needed):" '
+            f'default answer "{auto_url}" '
+            f'with title "Format Transcript" '
+            f'buttons {{"Skip", "OK"}} default button "OK"'
+        )
+    else:
+        script = (
+            'display dialog "Paste the source URL (or Skip):" '
+            'default answer "" '
+            'with title "Format Transcript" '
+            'buttons {"Skip", "OK"} default button "OK"'
+        )
+
     result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
     if result.returncode != 0:
-        return None  # Skip clicked or dismissed
-    # Extract the text answer from: "button returned:OK, text returned:https://..."
+        return None
     for part in result.stdout.strip().split(", "):
         if part.startswith("text returned:"):
             url = part[len("text returned:"):].strip()
