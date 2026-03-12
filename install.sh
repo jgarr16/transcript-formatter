@@ -37,6 +37,36 @@ echo "Installing macOS Service: '${SERVICE_NAME}'"
 
 mkdir -p "$CONTENTS_DIR"
 
+# Info.plist — required for macOS to index the Service in the Services menu
+cat > "$CONTENTS_DIR/Info.plist" << 'INFO_EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSBackgroundColorName</key>
+			<string>background</string>
+			<key>NSIconName</key>
+			<string>NSActionTemplate</string>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Format Transcript</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>runWorkflowAsService</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSStringPboardType</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
+INFO_EOF
+
 # The shell command that runs inside the Automator action.
 # stdin = selected text passed by macOS Services architecture.
 SHELL_CMD="$PYTHON \"$MAIN_PY\" --notify 2>>/tmp/transcript_formatter.log"
