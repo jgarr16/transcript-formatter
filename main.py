@@ -80,7 +80,7 @@ def main():
         _notify("Transcript Formatted", f"Saved: {name}")
 
 
-def _pick_folder() -> str | None:
+def _pick_folder():
     """Show a native Finder folder picker. Returns path string or None if cancelled."""
     import subprocess
     from config import load_config

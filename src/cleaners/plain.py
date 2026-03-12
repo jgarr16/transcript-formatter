@@ -13,7 +13,7 @@ def clean_plain(text: str) -> str:
     lines = [l.rstrip() for l in text.splitlines()]
 
     paragraphs = []
-    current: list[str] = []
+    current = []  # type: list
 
     for line in lines:
         if not line:
